@@ -123,6 +123,10 @@
           }
         }
       }
-    }},
-  "defaultProject": "xrestaurant-angular-web"
+    }
+  },
+  "defaultProject": "xrestaurant-angular-web",
+  "cli": {
+    "analytics": "77b96050-f1ad-48d7-8ae9-097b84f19343"
+  }
 }
