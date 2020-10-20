@@ -8,6 +8,8 @@ const appRoutes: Routes = [
     { path: '', component: HomeComponent, pathMatch: 'full' },
     { path: 'counter', component: CounterComponent },
     { path: 'fetch-data', component: FetchDataComponent },
+    { path: 'admin', loadChildren: () => import('./admin/admin.module').then(m => m.AdminModule)},
+    { path: '**', redirectTo: 'admin' }
   ];
 
   @NgModule ({
