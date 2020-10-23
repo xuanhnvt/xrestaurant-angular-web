@@ -1,0 +1,142 @@
+Private Sub ComboBox1_Change()
+    Dim dataSheet As Worksheet
+    Dim lastColumn As Integer
+    Dim lastRow As Long
+    Set dataSheet = Sheets("DATA INPUT")
+    lastColumn = WorksheetHelper.GetLastUsedColumn(dataSheet, Configuration.HeaderRowIndex)
+    'Get date index
+    Dim selectedDateColumnIndex As Long
+    Dim dateValue As String
+    For i = Configuration.StartingDateColumnIndex To lastColumn
+        dateValue = dataSheet.Cells(Configuration.HeaderRowIndex, i)
+        If dateValue = ComboBox1.Value Then
+            selectedDateColumnIndex = i
+            i = lastColumn + 1
+        End If
+    Next i
+    'MsgBox selectedDateColumnIndex
+    
+    lastRow = WorksheetHelper.GetLastUsedRow(dataSheet, Configuration.NameColumnIndex)
+    
+    
+    Dim employeeList As New Collection
+    Dim employeeItem As EmployeeRecord
+    Dim employeeName As String
+    Dim employeeGroup As String
+    Dim previousGroup As String
+    For lnRow = Configuration.StartingDataRowIndex To lastRow
+        employeeGroup = dataSheet.Cells(lnRow, Configuration.GroupColumnIndex)
+        employeeName = dataSheet.Cells(lnRow, Configuration.NameColumnIndex)
+        If Len(Trim(employeeName)) > 0 Then
+            Set employeeItem = New EmployeeRecord
+            employeeItem.Fullname = employeeName
+            employeeItem.No = dataSheet.Cells(lnRow, Configuration.NoColumnIndex)
+            employeeItem.Code = dataSheet.Cells(lnRow, Configuration.CodePrefixColumnIndex) + CStr(dataSheet.Cells(lnRow, Configuration.CodeNoColumnIndex))
+            employeeItem.Position = dataSheet.Cells(lnRow, Configuration.PositionColumnIndex)
+            If Len(Trim(employeeGroup)) = 0 Then
+                employeeItem.Group = previousGroup
+            Else
+                employeeItem.Group = employeeGroup
+            End If
+            employeeItem.WorkingStatus = dataSheet.Cells(lnRow, selectedDateColumnIndex)
+            employeeList.Add employeeItem
+        End If
+        
+        'Update previous group for next record
+        If Len(Trim(employeeGroup)) > 0 Then
+            previousGroup = employeeGroup
+        End If
+    Next lnRow
+    
+    'Dim items As LinqEnumerable
+    'Set items = LinqEnumerable.FromCollection(employeeList) _
+                          ..Where("x => x.employee.Group = ""FOREIGNER""")
+
+    'MsgBox employeeList.Count
+    'For Each employee In employeeList
+        'Debug.Print employee.No ' & " " & employee.Group
+    'Next employee
+    
+    'Summarize by group
+    Dim groupDictionary As New Scripting.Dictionary
+    For Each employee In employeeList
+        If groupDictionary.Exists(employee.Group) Then
+            Dim count As Integer
+            count = groupDictionary(employee.Group)
+            groupDictionary(employee.Group) = count + 1
+        Else
+            groupDictionary(employee.Group) = 1
+        End If
+            
+        'Debug.Print employee.No ' & " " & employee.Group
+    Next employee
+    
+    'Summarize by working status
+    Dim workingStatusDictionary As New Scripting.Dictionary
+    For Each employee In employeeList
+        If workingStatusDictionary.Exists(employee.WorkingStatus) Then
+            Dim total As Integer
+            total = workingStatusDictionary(employee.WorkingStatus)
+            workingStatusDictionary(employee.WorkingStatus) = total + 1
+        Else
+            workingStatusDictionary(employee.WorkingStatus) = 1
+        End If
+            
+        'Debug.Print employee.No ' & " " & employee.Group
+    Next employee
+    
+
+    For Each groupKey In groupDictionary.Keys
+        Debug.Print groupKey & "  " & groupDictionary(groupKey)
+    Next groupKey
+    
+    Dim statusRange As Range
+    
+    Set statusRange = Me.Range("A10:Z11")
+    statusRange.Clear
+    Dim workingStatusTotal As Integer
+    Dim workingStatusIndex As Integer
+    workingStatusIndex = 2
+    For i = 0 To workingStatusDictionary.count - 1
+        If Trim(workingStatusDictionary.Keys(i)) <> "" Then
+            statusRange.Cells(1, workingStatusIndex).Value = workingStatusDictionary.Keys(i)
+            statusRange.Cells(2, workingStatusIndex).Value = workingStatusDictionary.items(i)
+            workingStatusTotal = workingStatusTotal + workingStatusDictionary.items(i)
+            workingStatusIndex = workingStatusIndex + 1
+        End If
+        'Debug.Print workingStatusDictionary.Keys(i), workingStatusDictionary.items(i)
+    Next i
+    statusRange.Cells(1, 1).Value = "Total"
+    statusRange.Cells(2, 1).Value = workingStatusTotal
+
+    'For Each statusKey In workingStatusDictionary.Keys
+        'statusRange
+        'Debug.Print statusKey & "  " & workingStatusDictionary(statusKey)
+    'Next statusKey
+    
+End Sub
+
+Private Sub Worksheet_Activate()
+    Dim dataSheet As Worksheet
+    Set dataSheet = Sheets("DATA INPUT")
+    
+    Me.ComboBox1.Clear
+    Dim numberOfDays As Long
+    numberOfDays = WorksheetHelper.GetLastUsedColumn(dataSheet, Configuration.HeaderRowIndex) - Configuration.StartingDateColumnIndex + 1
+    'Debug.Print numberOfDays
+    
+    For theDate = 0 To numberOfDays - 1
+        'Debug.Print theDate
+        Me.ComboBox1.AddItem dataSheet.Cells(Configuration.HeaderRowIndex, Configuration.StartingDateColumnIndex + theDate)
+    Next theDate
+End Sub
+
+'New Class Moudle: EmployeeRecord
+Public No As Long
+Public Code As String
+Public Fullname As String
+Public Position As String
+Public Group As String
+Public WorkingStatus As String
+
+'Refer to Microsoft scripting library
