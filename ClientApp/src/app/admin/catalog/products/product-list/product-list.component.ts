@@ -1,5 +1,7 @@
 import { Component, Inject, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { ProductListItem } from '../models/product-list-item.model.ts';
+import { ProductPagedListViewModel } from '../models/product-paged-list-view-model';
+import { ProductService } from '../services/product.service';
 
 @Component({
   selector: 'app-product-list',
@@ -8,25 +10,17 @@ import { HttpClient } from '@angular/common/http';
 })
 export class ProductListComponent implements OnInit {
 
-  public forecasts: WeatherForecast[];
+  public forecasts: ProductListItem[];
   private baseUrl: string;
-  private http: HttpClient;
-  constructor(http: HttpClient, @Inject('BASE_URL') baseUrl: string) {
-    this.http = http;
-    this.baseUrl = baseUrl;
+  constructor(private productService: ProductService, @Inject('BASE_URL') baseUrl: string) {
+
   }
 
   ngOnInit() {
-    this.http.get<WeatherForecast[]>(this.baseUrl + 'weatherforecast').subscribe(result => {
-      this.forecasts = result;
+    this.productService.getProducts().subscribe(result => {
+      this.forecasts = result.items;
     }, error => console.error(error));
   }
 
 }
 
-interface WeatherForecast {
-  date: string;
-  temperatureC: number;
-  temperatureF: number;
-  summary: string;
-}
