@@ -1,3 +1,51 @@
+Private employeeList As New Collection
+
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, cancel As Boolean)
+    If Not Intersect(Target, Range("B11:Z11")) Is Nothing Then
+        cancel = True
+        Dim project As String
+        Dim startRow As Integer
+        startRow = Target.Row + 5
+        project = Trim(Target.Value)
+        
+        If project <> "" Then
+            For Each employee In employeeList
+                If InStr(employee.Group, "MANAGEMENT") > 0 Or InStr(employee.Group, "ADMIN") Or InStr(employee.Group, "ENGINEER") Or InStr(employee.Group, "STORE") Then
+                    
+                Else
+                    Dim halfDayString As String
+                    If InStr(employee.WorkingStatus, project) > 0 Then
+                        halfDayString = ""
+                        If employee.WorkingStatus Like "*(0.5*" Then
+                            halfDayString = " (0.5)"
+                        End If
+                        Me.Cells(startRow, Target.Column).Value = employee.Code & "-" & employee.Fullname & halfDayString
+                        startRow = startRow + 1
+                    Else
+                        If project = "IN-HOUSE" Then
+                            If InStr(employee.WorkingStatus, "IH") > 0 Then
+                                Me.Cells(startRow, Target.Column).Value = employee.Code & "-" & employee.Fullname
+                                startRow = startRow + 1
+                            End If
+                        ElseIf project = "ON LEAVE" Then
+                            If InStr(employee.WorkingStatus, "OL") > 0 Or employee.WorkingStatus Like "*(0.5*" Then
+                                halfDayString = ""
+                                If employee.WorkingStatus Like "*(0.5*" Then
+                                    halfDayString = " (0.5)"
+                                End If
+                                Me.Cells(startRow, Target.Column).Value = employee.Code & "-" & employee.Fullname & halfDayString
+                                startRow = startRow + 1
+                            End If
+                        End If
+                    End If
+                    
+                End If
+                'Debug.Print employee.No ' & " " & employee.Group
+            Next employee
+        End If
+    End If
+End Sub
+
 Private Sub ComboBox1_Change()
     Dim dataSheet As Worksheet
     Dim lastColumn As Integer
@@ -7,6 +55,11 @@ Private Sub ComboBox1_Change()
     'Get date index
     Dim selectedDateColumnIndex As Long
     Dim dateValue As String
+    
+    If Len(Trim(ComboBox1.Value)) = 0 Then
+        Exit Sub
+    End If
+    
     For i = Configuration.StartingDateColumnIndex To lastColumn
         dateValue = dataSheet.Cells(Configuration.HeaderRowIndex, i)
         If dateValue = ComboBox1.Value Then
@@ -19,7 +72,7 @@ Private Sub ComboBox1_Change()
     lastRow = WorksheetHelper.GetLastUsedRow(dataSheet, Configuration.NameColumnIndex)
     
     
-    Dim employeeList As New Collection
+    Set employeeList = Nothing
     Dim employeeItem As EmployeeRecord
     Dim employeeName As String
     Dim employeeGroup As String
@@ -48,71 +101,191 @@ Private Sub ComboBox1_Change()
         End If
     Next lnRow
     
-    'Dim items As LinqEnumerable
-    'Set items = LinqEnumerable.FromCollection(employeeList) _
-                          ..Where("x => x.employee.Group = ""FOREIGNER""")
-
-    'MsgBox employeeList.Count
-    'For Each employee In employeeList
+    'Summarize by working status
+    Dim workingStatusDictionary As New Scripting.Dictionary
+    Dim halfDayWoringDictionary As New Scripting.Dictionary
+    For Each employee In employeeList
+        If InStr(employee.Group, "MANAGEMENT") > 0 Or InStr(employee.Group, "ADMIN") Or InStr(employee.Group, "ENGINEER") Or InStr(employee.Group, "STORE") Then
+            
+        Else
+            If InStr(employee.WorkingStatus, "(0.5") > 0 Then
+                If halfDayWoringDictionary.Exists(employee.WorkingStatus) Then
+                    Dim halfDayTotal As Double
+                    halfDayTotal = halfDayWoringDictionary(employee.WorkingStatus)
+                    halfDayWoringDictionary(employee.WorkingStatus) = halfDayTotal + 0.5
+                Else
+                    halfDayWoringDictionary(employee.WorkingStatus) = 0.5
+                End If
+            Else
+                If workingStatusDictionary.Exists(employee.WorkingStatus) Then
+                    Dim total As Double
+                    total = workingStatusDictionary(employee.WorkingStatus)
+                    workingStatusDictionary(employee.WorkingStatus) = total + 1
+                Else
+                    workingStatusDictionary(employee.WorkingStatus) = 1
+                End If
+            End If
+        End If
         'Debug.Print employee.No ' & " " & employee.Group
-    'Next employee
+    Next employee
+
+    
+    Dim totalHalfWorkingDay As Double
+    Dim existWorkingStatus As Boolean
+    For Each halfDayKey In halfDayWoringDictionary.Keys
+        existWorkingStatus = False
+        For Each workStatus In workingStatusDictionary.Keys
+            If workStatus <> "" Then
+                If InStr(halfDayKey, workStatus) > 0 Then
+                    Dim workingTotal As Double
+                    workingTotal = workingStatusDictionary(workStatus)
+                    workingStatusDictionary(workStatus) = workingTotal + halfDayWoringDictionary(halfDayKey)
+                    existWorkingStatus = True
+                    Exit For
+                End If
+            End If
+        Next workStatus
+        If Not existWorkingStatus Then
+            Dim fullWorkingStatus As String
+            fullWorkingStatus = Right(halfDayKey, Len(halfDayKey) - 6)
+            workingStatusDictionary(fullWorkingStatus) = halfDayWoringDictionary(halfDayKey)
+        End If
+        totalHalfWorkingDay = totalHalfWorkingDay + halfDayWoringDictionary(halfDayKey)
+    Next halfDayKey
+    
+    If workingStatusDictionary.Exists("OL") Then
+        totalHalfWorkingDay = totalHalfWorkingDay + workingStatusDictionary("OL")
+    End If
+    
     
     'Summarize by group
     Dim groupDictionary As New Scripting.Dictionary
     For Each employee In employeeList
-        If groupDictionary.Exists(employee.Group) Then
-            Dim count As Integer
-            count = groupDictionary(employee.Group)
-            groupDictionary(employee.Group) = count + 1
+        If InStr(employee.Group, "MANAGEMENT") > 0 Or InStr(employee.Group, "ADMIN") Or InStr(employee.Group, "ENGINEER") Or InStr(employee.Group, "STORE") Then
+            If Trim(employee.WorkingStatus) <> "OL" Then
+                If groupDictionary.Exists(employee.Group) Then
+                    Dim countIndirect As Integer
+                    countIndirect = groupDictionary(employee.Group)
+                    groupDictionary(employee.Group) = countIndirect + 1
+                Else
+                    groupDictionary(employee.Group) = 1
+                End If
+            End If
         Else
-            groupDictionary(employee.Group) = 1
+            If Trim(employee.WorkingStatus) <> "" Then
+                If groupDictionary.Exists(employee.Group) Then
+                    Dim count As Integer
+                    count = groupDictionary(employee.Group)
+                    groupDictionary(employee.Group) = count + 1
+                Else
+                    groupDictionary(employee.Group) = 1
+                End If
+            End If
         End If
             
         'Debug.Print employee.No ' & " " & employee.Group
     Next employee
     
-    'Summarize by working status
-    Dim workingStatusDictionary As New Scripting.Dictionary
-    For Each employee In employeeList
-        If workingStatusDictionary.Exists(employee.WorkingStatus) Then
-            Dim total As Integer
-            total = workingStatusDictionary(employee.WorkingStatus)
-            workingStatusDictionary(employee.WorkingStatus) = total + 1
-        Else
-            workingStatusDictionary(employee.WorkingStatus) = 1
+    Dim groupRange As Range
+    Set groupRange = Me.Range("A7:N8")
+    'reset value to zero
+    For Each cell In Me.Range("B8:N8")
+        cell.Value = 0
+    Next cell
+    
+    Dim managementEmplyeeTotal As Integer
+    For groupIndex = 0 To groupDictionary.count - 1
+        Dim matchedGroup As Boolean
+        For j = 1 To groupRange.Columns.count
+            If InStr(groupDictionary.Keys(groupIndex), groupRange.Cells(1, j)) > 0 Then
+                groupRange.Cells(2, j).Value = groupDictionary.Items(groupIndex)
+                j = groupRange.Columns.count + 1
+            End If
+        Next j
+        If InStr(groupDictionary.Keys(groupIndex), "MANAGEMENT") > 0 Or InStr(groupDictionary.Keys(groupIndex), "ADMIN") Or InStr(groupDictionary.Keys(groupIndex), "ENGINEER") Then
+            managementEmplyeeTotal = managementEmplyeeTotal + groupDictionary.Items(groupIndex)
         End If
-            
-        'Debug.Print employee.No ' & " " & employee.Group
-    Next employee
+    Next groupIndex
     
-
-    For Each groupKey In groupDictionary.Keys
-        Debug.Print groupKey & "  " & groupDictionary(groupKey)
-    Next groupKey
+    'Output total employee in management group
+    groupRange.Cells(2, 2).Value = managementEmplyeeTotal
+    groupRange.Cells(2, 14).Value = totalHalfWorkingDay
     
+    'Clear working project info
+    Me.Range("A10:Z500").Clear
+    Me.Range("B10") = "Double click on project to view list"
     Dim statusRange As Range
-    
-    Set statusRange = Me.Range("A10:Z11")
+    Set statusRange = Me.Range("A11:Z12")
     statusRange.Clear
-    Dim workingStatusTotal As Integer
+    statusRange.HorizontalAlignment = xlCenter
+    Me.Range("A11:Z11").Font.Bold = True
+    Dim workingStatusTotal As Double
     Dim workingStatusIndex As Integer
     workingStatusIndex = 2
     For i = 0 To workingStatusDictionary.count - 1
-        If Trim(workingStatusDictionary.Keys(i)) <> "" Then
+        Dim workingString As String
+        workingString = Trim(workingStatusDictionary.Keys(i))
+        If workingString <> "" And workingString <> "OL" And workingString <> "IH" Then
             statusRange.Cells(1, workingStatusIndex).Value = workingStatusDictionary.Keys(i)
-            statusRange.Cells(2, workingStatusIndex).Value = workingStatusDictionary.items(i)
-            workingStatusTotal = workingStatusTotal + workingStatusDictionary.items(i)
+            statusRange.Cells(2, workingStatusIndex).Value = workingStatusDictionary.Items(i)
+            statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+            workingStatusTotal = workingStatusTotal + workingStatusDictionary.Items(i)
             workingStatusIndex = workingStatusIndex + 1
         End If
         'Debug.Print workingStatusDictionary.Keys(i), workingStatusDictionary.items(i)
     Next i
+    
+    If workingStatusDictionary.Exists("IH") Then
+        statusRange.Cells(1, workingStatusIndex).Value = "IN-HOUSE"
+        statusRange.Cells(2, workingStatusIndex).Value = workingStatusDictionary("IH")
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        workingStatusIndex = workingStatusIndex + 1
+        workingStatusTotal = workingStatusTotal + workingStatusDictionary("IH")
+        Cells(4, 8) = workingStatusDictionary("IH")
+    Else
+        Cells(4, 8) = 0
+    End If
+    
+    If totalHalfWorkingDay <> 0 Then
+        statusRange.Cells(1, workingStatusIndex).Value = "ON LEAVE"
+        statusRange.Cells(2, workingStatusIndex).Value = totalHalfWorkingDay
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(1, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        statusRange.Cells(2, workingStatusIndex).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+        workingStatusIndex = workingStatusIndex + 1
+        workingStatusTotal = workingStatusTotal + totalHalfWorkingDay
+    End If
+    
     statusRange.Cells(1, 1).Value = "Total"
     statusRange.Cells(2, 1).Value = workingStatusTotal
-
-    'For Each statusKey In workingStatusDictionary.Keys
-        'statusRange
-        'Debug.Print statusKey & "  " & workingStatusDictionary(statusKey)
-    'Next statusKey
+    statusRange.Cells(1, 1).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(1, 1).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(1, 1).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(1, 1).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(2, 1).Borders(Excel.XlBordersIndex.xlEdgeRight).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(2, 1).Borders(Excel.XlBordersIndex.xlEdgeLeft).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(2, 1).Borders(Excel.XlBordersIndex.xlEdgeBottom).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    statusRange.Cells(2, 1).Borders(Excel.XlBordersIndex.xlEdgeTop).LineStyle = Excel.XlDataBarBorderType.xlDataBarBorderSolid
+    
     
 End Sub
 
@@ -121,6 +294,17 @@ Private Sub Worksheet_Activate()
     Set dataSheet = Sheets("DATA INPUT")
     
     Me.ComboBox1.Clear
+    'Clear group info
+    For Each cell In Me.Range("B8:N8")
+        cell.Value = 0
+    Next cell
+    
+    'Clear working project info
+    Me.Range("A10:Z500").Clear
+    
+    'Reset cell for IH
+    Cells(4, 8) = 0
+    
     Dim numberOfDays As Long
     numberOfDays = WorksheetHelper.GetLastUsedColumn(dataSheet, Configuration.HeaderRowIndex) - Configuration.StartingDateColumnIndex + 1
     'Debug.Print numberOfDays
@@ -131,12 +315,4 @@ Private Sub Worksheet_Activate()
     Next theDate
 End Sub
 
-'New Class Moudle: EmployeeRecord
-Public No As Long
-Public Code As String
-Public Fullname As String
-Public Position As String
-Public Group As String
-Public WorkingStatus As String
 
-'Refer to Microsoft scripting library
