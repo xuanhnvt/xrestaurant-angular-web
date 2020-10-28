@@ -106,7 +106,15 @@ Private Sub ComboBox1_Change()
     Dim halfDayWoringDictionary As New Scripting.Dictionary
     For Each employee In employeeList
         If InStr(employee.Group, "MANAGEMENT") > 0 Or InStr(employee.Group, "ADMIN") Or InStr(employee.Group, "ENGINEER") Or InStr(employee.Group, "STORE") Then
-            
+            'If Trim(employee.WorkingStatus) = "OL" Then
+                'If workingStatusDictionary.Exists(employee.WorkingStatus) Then
+                    'Dim totalOL As Double
+                    'totalOL = workingStatusDictionary(employee.WorkingStatus)
+                    'workingStatusDictionary(employee.WorkingStatus) = totalOL + 1
+                'Else
+                    'workingStatusDictionary(employee.WorkingStatus) = 1
+                'End If
+            'End If
         Else
             If InStr(employee.WorkingStatus, "(0.5") > 0 Then
                 If halfDayWoringDictionary.Exists(employee.WorkingStatus) Then
@@ -160,31 +168,44 @@ Private Sub ComboBox1_Change()
     
     'Summarize by group
     Dim groupDictionary As New Scripting.Dictionary
+    Dim onLeaveTotal As Double
     For Each employee In employeeList
-        If InStr(employee.Group, "MANAGEMENT") > 0 Or InStr(employee.Group, "ADMIN") Or InStr(employee.Group, "ENGINEER") Or InStr(employee.Group, "STORE") Then
-            If Trim(employee.WorkingStatus) <> "OL" Then
-                If groupDictionary.Exists(employee.Group) Then
-                    Dim countIndirect As Integer
-                    countIndirect = groupDictionary(employee.Group)
-                    groupDictionary(employee.Group) = countIndirect + 1
-                Else
-                    groupDictionary(employee.Group) = 1
-                End If
-            End If
-        Else
+        'If InStr(employee.Group, "MANAGEMENT") > 0 Or InStr(employee.Group, "ADMIN") Or InStr(employee.Group, "ENGINEER") Or InStr(employee.Group, "STORE") Then
+            'If Trim(employee.WorkingStatus) <> "OL" Then
+                'If groupDictionary.Exists(employee.Group) Then
+                    'Dim countIndirect As Integer
+                    'countIndirect = groupDictionary(employee.Group)
+                    'groupDictionary(employee.Group) = countIndirect + 1
+                'Else
+                    'groupDictionary(employee.Group) = 1
+                'End If
+            'End If
+        'Else
             If Trim(employee.WorkingStatus) <> "" Then
-                If groupDictionary.Exists(employee.Group) Then
-                    Dim count As Integer
-                    count = groupDictionary(employee.Group)
-                    groupDictionary(employee.Group) = count + 1
+                If employee.WorkingStatus = "OL" Then
+                    onLeaveTotal = onLeaveTotal + 1
                 Else
-                    groupDictionary(employee.Group) = 1
+                    Dim tempValue As Double
+                    If employee.WorkingStatus Like "*(0.5*" Then
+                        tempValue = 0.5
+                        onLeaveTotal = onLeaveTotal + 0.5
+                    Else
+                        tempValue = 1
+                    End If
+                    If groupDictionary.Exists(employee.Group) Then
+                        Dim count As Double
+                        count = groupDictionary(employee.Group)
+                        groupDictionary(employee.Group) = count + tempValue
+                    Else
+                        groupDictionary(employee.Group) = tempValue
+                    End If
                 End If
             End If
-        End If
+        'End If
             
         'Debug.Print employee.No ' & " " & employee.Group
     Next employee
+    groupDictionary("ON LEAVE") = onLeaveTotal
     
     Dim groupRange As Range
     Set groupRange = Me.Range("A7:N8")
@@ -193,7 +214,7 @@ Private Sub ComboBox1_Change()
         cell.Value = 0
     Next cell
     
-    Dim managementEmplyeeTotal As Integer
+    Dim managementEmplyeeTotal As Double
     For groupIndex = 0 To groupDictionary.count - 1
         Dim matchedGroup As Boolean
         For j = 1 To groupRange.Columns.count
@@ -209,7 +230,7 @@ Private Sub ComboBox1_Change()
     
     'Output total employee in management group
     groupRange.Cells(2, 2).Value = managementEmplyeeTotal
-    groupRange.Cells(2, 14).Value = totalHalfWorkingDay
+    'groupRange.Cells(2, 14).Value = totalHalfWorkingDay
     
     'Clear working project info
     Me.Range("A10:Z500").Clear
@@ -314,5 +335,6 @@ Private Sub Worksheet_Activate()
         Me.ComboBox1.AddItem dataSheet.Cells(Configuration.HeaderRowIndex, Configuration.StartingDateColumnIndex + theDate)
     Next theDate
 End Sub
+
 
 
